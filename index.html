@@ -9,6 +9,11 @@
 
 <script type="module">
   import init from "./pkg/pano.js";
-  await init();
-  console.log("OK!");
+  try {
+    await init();
+  } catch (e) {
+    if (!e.message.match(/using exceptions for control flow/i)) {
+      throw e;
+    }
+  }
 </script>

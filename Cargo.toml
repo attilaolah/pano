@@ -1,6 +1,6 @@
 [package]
 name = "pano"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 
 [lib]
@@ -10,17 +10,16 @@ crate-type = ["cdylib", "rlib"]
 cfg-if = "1"
 env_logger = "0.10"
 log = "0.4"
-wgpu = "0.17"
-winit = "0.28"
-
-[target.'cfg(target_arch = "wasm32")'.dependencies]
-console_error_panic_hook = "0.1.6"
-console_log = "1.0"
-wgpu = { version = "0.17", features = ["webgl"]}
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4.30"
+wgpu = { version = "0.17", features = ["webgl"]}
+winit = "0.28"
 web-sys = { version = "0.3", features = [
     "Document",
     "Window",
     "Element",
 ]}
+
+# TODO: These should only be in the debug build.
+console_error_panic_hook = "0.1.6"
+console_log = "1.0"

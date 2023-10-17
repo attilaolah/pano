@@ -1,43 +1,32 @@
+use wasm_bindgen::prelude::wasm_bindgen;
 use winit::{
+    dpi::PhysicalSize,
     event::*,
     event_loop::{ControlFlow, EventLoop},
     window::WindowBuilder,
 };
 
-#[cfg(target_arch = "wasm32")]
-use wasm_bindgen::prelude::*;
-
-#[cfg_attr(target_arch = "wasm32", wasm_bindgen(start))]
-pub fn run() {
-    cfg_if::cfg_if! {
-        if #[cfg(target_arch = "wasm32")] {
-            std::panic::set_hook(Box::new(console_error_panic_hook::hook));
-            console_log::init_with_level(log::Level::Warn).expect("Couldn't initialize logger");
-        } else {
-            env_logger::init();
-        }
-    }
+#[wasm_bindgen(start)]
+pub fn main() {
+    std::panic::set_hook(Box::new(console_error_panic_hook::hook));
+    console_log::init_with_level(log::Level::Warn).expect("failed to initialise logger");
 
     let event_loop = EventLoop::new();
     let window = WindowBuilder::new().build(&event_loop).unwrap();
 
-    #[cfg(target_arch = "wasm32")]
-    {
-        // Winit prevents sizing with CSS, so we have to set the size manually when on web.
-        use winit::dpi::PhysicalSize;
-        window.set_inner_size(PhysicalSize::new(1280, 720));
+    // Winit prevents sizing with CSS, so we have to set the size manually when on web.
+    window.set_inner_size(PhysicalSize::new(1280, 720));
 
-        use winit::platform::web::WindowExtWebSys;
-        web_sys::window()
-            .and_then(|win| win.document())
-            .and_then(|doc| {
-                let viewport = doc.get_element_by_id("viewport")?;
-                let canvas = web_sys::Element::from(window.canvas());
-                viewport.append_child(&canvas).ok()?;
-                Some(())
-            })
-            .expect("Couldn't append canvas to document body.");
-    }
+    use winit::platform::web::WindowExtWebSys;
+    web_sys::window()
+        .and_then(|win| win.document())
+        .and_then(|doc| {
+            let viewport = doc.get_element_by_id("viewport")?;
+            let canvas = web_sys::Element::from(window.canvas());
+            viewport.append_child(&canvas).ok()?;
+            Some(())
+        })
+        .expect("failed to append canvas to viewport");
 
     event_loop.run(move |event, _, control_flow| match event {
         Event::WindowEvent {
