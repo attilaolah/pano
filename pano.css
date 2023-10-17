@@ -1,8 +1,14 @@
-body { margin: 1rem; }
-canvas { border: thin solid black; 0}
-
+body {
+  margin: 0;
+  background: black;
+  overflow: hidden;
+}
 #viewport {
   display: flex;
   flex-direction: column;
   align-items: center;
+}
+#viewport > canvas {
+  width: 100vw !important;
+  height: 100vh !important;
 }
