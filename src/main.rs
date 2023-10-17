@@ -1,3 +1,5 @@
+use pano::run;
+
 fn main() {
-    println!("Hello, world!");
+    run();
 }

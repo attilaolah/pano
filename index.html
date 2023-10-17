@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+
+<meta charset="utf-8">
+<title>Panorama Viewer</title>
+
+<link rel="stylesheet" href="pano.css">
+
+<main id="viewport"></main>
+
+<script type="module">
+  import init from "./pkg/pano.js";
+  await init();
+  console.log("OK!");
+</script>

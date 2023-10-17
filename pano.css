@@ -1,0 +1,8 @@
+body { margin: 1rem; }
+canvas { border: thin solid black; 0}
+
+#viewport {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
