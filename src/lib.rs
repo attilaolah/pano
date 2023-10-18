@@ -1,3 +1,4 @@
+use crate::texture::Texture;
 use bytemuck::{Pod, Zeroable};
 use wasm_bindgen::prelude::wasm_bindgen;
 use wgpu::util::DeviceExt;
@@ -8,6 +9,8 @@ use winit::{
     platform::web::WindowExtWebSys,
     window::{Window, WindowBuilder},
 };
+
+mod texture;
 
 struct PanoViewer {
     surface: wgpu::Surface,
@@ -24,6 +27,7 @@ struct PanoViewer {
     index_buffer: wgpu::Buffer,
     num_indices: u32,
     diffuse_bind_group: wgpu::BindGroup,
+    diffuse_texture: Texture,
 }
 
 #[repr(C)]
@@ -34,33 +38,27 @@ struct Vertex {
 }
 
 const VERTICES: &[Vertex] = &[
-    // Changed
     Vertex {
-        position: [-0.0868241, 0.49240386, 0.0],
-        tex_coords: [0.4131759, 0.00759614],
-    }, // A
+        position: [-1.0, 1.0, 0.0],
+        tex_coords: [0.0, 0.0],
+    }, // TL
     Vertex {
-        position: [-0.49513406, 0.06958647, 0.0],
-        tex_coords: [0.0048659444, 0.43041354],
-    }, // B
+        position: [1.0, 1.0, 0.0],
+        tex_coords: [1.0, 0.0],
+    }, // TR
     Vertex {
-        position: [-0.21918549, -0.44939706, 0.0],
-        tex_coords: [0.28081453, 0.949397],
-    }, // C
+        position: [-1.0, -1.0, 0.0],
+        tex_coords: [0.0, 1.0],
+    }, // BL
     Vertex {
-        position: [0.35966998, -0.3473291, 0.0],
-        tex_coords: [0.85967, 0.84732914],
-    }, // D
-    Vertex {
-        position: [0.44147372, 0.2347359, 0.0],
-        tex_coords: [0.9414737, 0.2652641],
-    }, // E
+        position: [1.0, -1.0, 0.0],
+        tex_coords: [1.0, 1.0],
+    }, // BR
 ];
 
 const INDICES: &[u16] = &[
-    0, 1, 4, // ABE
-    1, 2, 4, // BCE
-    2, 3, 4, // CDE
+    0, 2, 1, // TL
+    1, 2, 3, // BR
 ];
 
 impl PanoViewer {
@@ -126,58 +124,8 @@ impl PanoViewer {
         surface.configure(&device, &config);
 
         let diffuse_bytes = include_bytes!("textures/embed.eqr.jpg");
-        let diffuse_image = image::load_from_memory(diffuse_bytes).unwrap();
-        let diffuse_rgba = diffuse_image.to_rgba8();
-
-        use image::GenericImageView;
-        let dimensions = diffuse_image.dimensions();
-
-        let texture_size = wgpu::Extent3d {
-            width: dimensions.0,
-            height: dimensions.1,
-            depth_or_array_layers: 1,
-        };
-        let diffuse_texture = device.create_texture(&wgpu::TextureDescriptor {
-            // All textures are stored as 3D, we represent our 2D texture by setting depth to 1.
-            size: texture_size,
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            // Using sRGB for now.
-            format: wgpu::TextureFormat::Rgba8UnormSrgb,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-            label: Some("diffuse_texture"),
-            view_formats: &[],
-        });
-
-        queue.write_texture(
-            wgpu::ImageCopyTexture {
-                texture: &diffuse_texture,
-                mip_level: 0,
-                origin: wgpu::Origin3d::ZERO,
-                aspect: wgpu::TextureAspect::All,
-            },
-            &diffuse_rgba,
-            wgpu::ImageDataLayout {
-                offset: 0,
-                bytes_per_row: Some(4 * dimensions.0),
-                rows_per_image: Some(dimensions.1),
-            },
-            texture_size,
-        );
-
-        // We don't need to configure the texture view much, so let's let wgpu define it.
-        let diffuse_texture_view =
-            diffuse_texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let diffuse_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-            address_mode_u: wgpu::AddressMode::Repeat,
-            address_mode_v: wgpu::AddressMode::MirrorRepeat,
-            address_mode_w: wgpu::AddressMode::ClampToEdge,
-            mag_filter: wgpu::FilterMode::Linear,
-            min_filter: wgpu::FilterMode::Nearest,
-            mipmap_filter: wgpu::FilterMode::Nearest,
-            ..Default::default()
-        });
+        let diffuse_texture =
+            Texture::from_bytes(&device, &queue, diffuse_bytes, "diffuse_texture").unwrap();
 
         let texture_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -208,11 +156,11 @@ impl PanoViewer {
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&diffuse_texture_view),
+                    resource: wgpu::BindingResource::TextureView(&diffuse_texture.view),
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
-                    resource: wgpu::BindingResource::Sampler(&diffuse_sampler),
+                    resource: wgpu::BindingResource::Sampler(&diffuse_texture.sampler),
                 },
             ],
             label: Some("diffuse_bind_group"),
@@ -287,6 +235,7 @@ impl PanoViewer {
             index_buffer,
             num_indices,
             diffuse_bind_group,
+            diffuse_texture,
         }
     }
 
