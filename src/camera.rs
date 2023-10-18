@@ -1,55 +1,156 @@
-use cgmath::{Deg, Matrix4, Point3, Vector3};
-
-pub const OPENGL_TO_WGPU_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::new(
-    1.0, 0.0, 0.0, 0.0, //
-    0.0, 1.0, 0.0, 0.0, //
-    0.0, 0.0, 0.5, 0.5, //
-    0.0, 0.0, 0.0, 1.0, //
-);
+use cgmath::{Deg, Rad, Zero};
+use winit::event::{ElementState, KeyboardInput, VirtualKeyCode, WindowEvent};
 
 pub struct Camera {
-    target: Point3<f32>,
+    // Azimuthal angle "phi".
+    // Rotates the camera around the vertical axis (left/right).
+    phi: Rad<f32>,
+    // Polar angle "theta".
+    // Rotates the camera around the horizontal axis (up/down).
+    theta: Rad<f32>,
+    // Vertical (Y) field of view.
+    fovy: Rad<f32>,
+    // Aspect ratio (width / height).
     aspect: f32,
+}
+
+pub struct CameraController {
+    hold_up: bool,
+    hold_down: bool,
+    hold_left: bool,
+    hold_right: bool,
+    hold_plus: bool,
+    hold_minus: bool,
+    hold_zero: bool,
 }
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct CameraUniform {
-    // We can't use cgmath with bytemuck directly.
-    view_proj: [[f32; 4]; 4],
+    theta: f32,
+    phi: f32,
+    fovy: f32,
+    aspect: f32,
 }
 
 impl Camera {
-    pub fn new(target: Point3<f32>, aspect: f32) -> Self {
-        Self { target, aspect }
+    pub fn new(aspect: f32) -> Self {
+        Self {
+            theta: Rad::zero(),
+            phi: Rad::zero(),
+            fovy: Deg(30.0).into(),
+            aspect,
+        }
     }
-    fn view_projection_matrix(&self) -> Matrix4<f32> {
-        const FOVY: f32 = 45.0;
-        const ZNEAR: f32 = 0.1;
-        const ZFAR: f32 = 100.0;
+}
 
-        let view = Matrix4::look_at_rh(
-            // This camera is always at the origin.
-            (0.0, 0.0, 0.0).into(),
-            // Looking at the target.
-            self.target,
-            // Up is +y.
-            Vector3::unit_y(),
-        );
-        let proj = cgmath::perspective(Deg(FOVY), self.aspect, ZNEAR, ZFAR);
-        return OPENGL_TO_WGPU_MATRIX * proj * view;
+impl CameraController {
+    pub fn new() -> Self {
+        Self {
+            hold_up: false,
+            hold_down: false,
+            hold_left: false,
+            hold_right: false,
+            hold_plus: false,
+            hold_minus: false,
+            hold_zero: false,
+        }
+    }
+
+    pub fn process_events(&mut self, event: &WindowEvent) -> bool {
+        match event {
+            WindowEvent::KeyboardInput {
+                input:
+                    KeyboardInput {
+                        state,
+                        virtual_keycode: Some(keycode),
+                        ..
+                    },
+                ..
+            } => {
+                let is_pressed = *state == ElementState::Pressed;
+                match keycode {
+                    VirtualKeyCode::Up => {
+                        self.hold_up = is_pressed;
+                        true
+                    }
+                    VirtualKeyCode::Left => {
+                        self.hold_left = is_pressed;
+                        true
+                    }
+                    VirtualKeyCode::Down => {
+                        self.hold_down = is_pressed;
+                        true
+                    }
+                    VirtualKeyCode::Right => {
+                        self.hold_right = is_pressed;
+                        true
+                    }
+                    VirtualKeyCode::Plus | VirtualKeyCode::NumpadAdd => {
+                        self.hold_plus = is_pressed;
+                        true
+                    }
+                    VirtualKeyCode::Minus | VirtualKeyCode::NumpadSubtract => {
+                        self.hold_minus = is_pressed;
+                        true
+                    }
+                    VirtualKeyCode::Numpad0 => {
+                        self.hold_zero = is_pressed;
+                        true
+                    }
+                    _ => false,
+                }
+            }
+            _ => false,
+        }
+    }
+
+    pub fn update_camera(&self, camera: &mut Camera) {
+        if self.hold_up {
+            camera.theta += Deg(1.0).into();
+        }
+        if self.hold_down {
+            camera.theta -= Deg(1.0).into();
+        }
+        if self.hold_left {
+            camera.phi -= Deg(1.0).into();
+        }
+        if self.hold_right {
+            camera.phi += Deg(1.0).into();
+        }
+        if self.hold_minus {
+            if camera.fovy <= Deg(85.0).into() {
+                camera.fovy += Deg(5.0).into();
+            }
+        }
+        if self.hold_plus {
+            if camera.fovy >= Deg(10.0).into() {
+                camera.fovy -= Deg(5.0).into();
+            }
+        }
+        if self.hold_zero {
+            // TODO: camera.reset()!
+            camera.phi = Deg(0.0).into();
+            camera.theta = Deg(0.0).into();
+            camera.fovy = Deg(30.0).into();
+        }
     }
 }
 
 impl CameraUniform {
     pub fn new() -> Self {
-        use cgmath::SquareMatrix;
         Self {
-            view_proj: cgmath::Matrix4::identity().into(),
+            theta: 0.0,
+            phi: 0.0,
+            fovy: 0.0,
+            aspect: 1.0,
         }
     }
 
-    pub fn update_view_proj(&mut self, camera: &Camera) {
-        self.view_proj = camera.view_projection_matrix().into();
+    pub fn update(&mut self, camera: &Camera) {
+        self.theta = camera.theta.0;
+        self.phi = camera.phi.0;
+        self.fovy = camera.fovy.0;
+        self.aspect = camera.aspect;
     }
 }

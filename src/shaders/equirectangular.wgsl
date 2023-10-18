@@ -1,5 +1,10 @@
+// Simple equirectangular-to-rectilinear camera.
+
 struct CameraUniform {
-    view_proj: mat4x4<f32>,
+    theta: f32,
+    phi: f32,
+    fovy: f32,
+    aspect: f32,
 };
 @group(1) @binding(0)
 var<uniform> camera: CameraUniform;
@@ -40,23 +45,61 @@ var t_diffuse: texture_2d<f32>;
 @group(0) @binding(1)
 var s_diffuse: sampler;
 
-// Simple equirectangular-to-rectilinear camera.
-
-// Theta rotates left-right around the vertical axis.
-// Normalised to represent [-180°, 180°] as [-1.0, 1.0].
-const THETA: f32 = 0.0;
-// Phi rotates up/down around the horizontal axis.
-// Normalised to represent [-90°, 90°] as [-1.0, 1.0].
-const PHI: f32 = 0.0;
-// The aspect ratio is simply width / height;
-const aspect: f32 = 1.77777777; // = 16.0 / 9.0;
-
 const PI: f32 = 3.14159265;
 const TAU: f32 = 6.28318531;
+const UP: vec3<f32> = vec3<f32>(0.0, 1.0, 0.0);
 
-// Convert normalised [-1., 1.] to UV [0, 1] space.
-fn uv2(xy: vec2<f32>) -> vec2<f32> {
-    return vec2<f32>((xy[0] + 1.0) / 2.0);
+// Create a rotation matrix that rotates up/down, around the X axis.
+fn rot_x(by: f32) -> mat3x3<f32> {
+    let cby = cos(by);
+    let sby = sin(by);
+
+    return mat3x3<f32>(
+        1.0, 0.0,  0.0,
+        0.0, cby, -sby,
+        0.0, sby,  cby,
+    );
+}
+
+// Create a rotation matrix that rotates left/right, around the Y axis.
+fn rot_y(by: f32) -> mat3x3<f32> {
+    let cby = cos(by);
+    let sby = sin(by);
+
+    return mat3x3<f32>(
+         cby, 0.0, sby,
+         0.0, 1.0, 0.0,
+        -sby, 0.0, cby,
+    );
+}
+
+// Create a rotation matrix that rotates around any axis.
+fn rot_around(axis: vec3<f32>, by: f32) -> mat3x3<f32> {
+    let cby = cos(by);
+    let sby = sin(by);
+    let cbn = 1.0 - cby;
+
+    let x = axis.x;
+    let y = axis.y;
+    let z = axis.z;
+
+    // Only ChatGPT knows how this works.
+    return mat3x3<f32>(
+        cby + cbn * x * x,     cbn * x * y - sby * z, cbn * x * z + sby * y,
+        cbn * y * x + sby * z, cby + cbn * y * y,     cbn * y * z - sby * x,
+        cbn * z * x - sby * y, cbn * z * y + sby * x, cby + cbn * z * z,
+    );
+}
+
+// Convert a direction to polar coordinates.
+fn to_polar(dir: vec3<f32>) -> vec2<f32> {
+    // Azimuthal angle (angle around the vertical axis).
+    let phi = atan2(dir.z, dir.x);
+
+    // Polar angle (angle around the horizontal axis).
+    let theta = atan2(length(dir.xz), dir.y);
+
+    return vec2<f32>(phi, theta);
 }
 
 @fragment
@@ -66,13 +109,30 @@ fn frag_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
     // Vertical field of view to maintain.
     // Hor+ scaling: the horizontal field of view changes depending on the aspect ratio.
-    let fovy: f32 = PI * 90.0 / 180.0;
-    let f: f32 = 0.5 / tan(fovy / 2.0);
-    let a: f32 = atan(-(0.5 - u) / f);
-    let b: f32 = atan(-(0.5 - v) / f);
-    //let eqr_u: f32 = 0.5 - (THETA + (a / TAU) * aspect);
-    let eqr_u: f32 = (THETA + (a / TAU * aspect)) + 0.5;
-    let eqr_v: f32 = (PHI + (b / PI)) + 0.5;
+    let f = 0.5 / tan(camera.fovy / 2.0);
+
+    // Camera orientation.
+    let cam_phi = rot_y(-camera.phi);
+    let cam_theta = rot_x(camera.theta);
+    let cam_rot = cam_phi * cam_theta;
+
+    // The direction the camera is facing. The "zero" position is +z.
+    let cam_dir = cam_rot * vec3<f32>(0.0, 0.0, 1.0);
+
+    // Camera rotation axes.
+    let cam_x = cam_rot * vec3<f32>(1.0, 0.0, 0.0);
+    let cam_y = cam_rot * vec3<f32>(0.0, 1.0, 0.0);
+
+    // Horizontal and vertictal angle from the camera direction.
+    let a = atan((0.5 - u) * camera.aspect / f);
+    let b = atan((0.5 - v) / f);
+
+    // Rotate the camera direction towards the current pixel value.
+    let dir = (rot_around(cam_x, b) * rot_around(cam_y, a)) * cam_dir;
+    let dir_polar = to_polar(normalize(dir));
+
+    let eqr_u = -degrees(dir_polar.x) / 360.0 + 0.75;
+    let eqr_v = degrees(dir_polar.y) / 180.0;
 
     return textureSample(t_diffuse, s_diffuse, vec2<f32>(
         eqr_u,

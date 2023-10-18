@@ -1,5 +1,5 @@
 use crate::{
-    camera::{Camera, CameraUniform},
+    camera::{Camera, CameraController, CameraUniform},
     texture::Texture,
 };
 use bytemuck::{Pod, Zeroable};
@@ -33,6 +33,7 @@ struct PanoViewer {
     diffuse_bind_group: wgpu::BindGroup,
     diffuse_texture: Texture,
     camera: Camera,
+    camera_controller: CameraController,
     camera_uniform: CameraUniform,
     camera_buffer: wgpu::Buffer,
     camera_bind_group: wgpu::BindGroup,
@@ -174,12 +175,11 @@ impl PanoViewer {
             label: Some("diffuse_bind_group"),
         });
 
-        let camera = Camera::new(
-            (0.0, 0.0, 1.0).into(),
-            config.width as f32 / config.height as f32,
-        );
+        let camera = Camera::new(config.width as f32 / config.height as f32);
         let mut camera_uniform = CameraUniform::new();
-        camera_uniform.update_view_proj(&camera);
+        camera_uniform.update(&camera);
+
+        let camera_controller = CameraController::new();
 
         let camera_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("camera_Buffer"),
@@ -281,6 +281,7 @@ impl PanoViewer {
             diffuse_bind_group,
             diffuse_texture,
             camera,
+            camera_controller,
             camera_uniform,
             camera_buffer,
             camera_bind_group,
@@ -300,11 +301,19 @@ impl PanoViewer {
         }
     }
 
-    fn input(&mut self, _event: &WindowEvent) -> bool {
-        false
+    fn input(&mut self, event: &WindowEvent) -> bool {
+        self.camera_controller.process_events(event)
     }
 
-    fn update(&mut self) {}
+    fn update(&mut self) {
+        self.camera_controller.update_camera(&mut self.camera);
+        self.camera_uniform.update(&self.camera);
+        self.queue.write_buffer(
+            &self.camera_buffer,
+            0,
+            bytemuck::cast_slice(&[self.camera_uniform]),
+        );
+    }
 
     fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
         let output = self.surface.get_current_texture()?;
