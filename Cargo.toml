@@ -26,3 +26,6 @@ web-sys = { version = "0.3", features = [
 # TODO: These should only be in the debug build.
 console_error_panic_hook = "0.1"
 console_log = "1.0"
+
+# TODO: Use the browser to load external textures.
+image = { version = "0.24", default-features = false, features = ["jpeg"] }
