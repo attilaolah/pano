@@ -9,6 +9,6 @@ body {
   align-items: center;
 }
 #viewport > canvas {
-  width: 100vw !important;
-  height: 100vh !important;
+  /*width: 100vw !important;
+  height: 100vh !important;*/
 }
