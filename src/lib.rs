@@ -376,11 +376,24 @@ pub async fn main() {
     let event_loop = EventLoop::new();
     let window = WindowBuilder::new().build(&event_loop).unwrap();
 
-    // CSS is used for setting the final size, but set a fallback size here that should still work.
-    window.set_inner_size(PhysicalSize::new(1280, 720));
+    let dom_win = web_sys::window().expect("DOM window not found");
 
-    web_sys::window()
-        .and_then(|win| win.document())
+    // CSS is used for setting the final size, but set a fallback size here that should still work.
+    window.set_inner_size(PhysicalSize::new(
+        dom_win
+            .inner_width()
+            .map(|js_val| js_val.as_f64())
+            .and_then(|num| Ok(num.unwrap_or_default() as i32))
+            .unwrap_or(1280),
+        dom_win
+            .inner_width()
+            .map(|js_val| js_val.as_f64())
+            .and_then(|num| Ok(num.unwrap_or_default() as i32))
+            .unwrap_or(720),
+    ));
+
+    dom_win
+        .document()
         .and_then(|doc| {
             let viewport = doc.get_element_by_id("viewport")?;
             let canvas = web_sys::Element::from(window.canvas());
